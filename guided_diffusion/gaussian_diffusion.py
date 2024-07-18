@@ -266,13 +266,15 @@ class GaussianDiffusion:
         if model_kwargs is None:
             model_kwargs = {}
         B, C = x.shape[:2]
-        C=1
+        # C=1
+        C = model.model.out_channels
         cal = 0
         assert t.shape == (B,)
         model_output = model(x, self._scale_timesteps(t), **model_kwargs)
         if isinstance(model_output, tuple):
             model_output, cal = model_output
-        x=x[:,-1:,...]  #loss is only calculated on the last channel, not on the input brain MR image
+        # x=x[:,-1:,...]  #loss is only calculated on the last channel, not on the input brain MR image
+        x=x[:,model.model.in_channels:,...]  #loss is only calculated on the segmentation channels, not on the input brain MR image
         if self.model_var_type in [ModelVarType.LEARNED, ModelVarType.LEARNED_RANGE]:
             assert model_output.shape == (B, C * 2, *x.shape[2:])
             model_output, model_var_values = th.split(model_output, C, dim=1)
@@ -447,7 +449,8 @@ class GaussianDiffusion:
             denoised_fn=denoised_fn,
             model_kwargs=model_kwargs,
         )
-        noise = th.randn_like(x[:, -1:,...])
+        # noise = th.randn_like(x[:, -1:,...])
+        noise = th.randn_like(x[:, model.in_channels:,...])
         nonzero_mask = (
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
         )
@@ -591,8 +594,6 @@ class GaussianDiffusion:
                 cal_out = torch.clamp(final["cal"] + 0.25 * final["sample"][:,-1,:,:].unsqueeze(1), 0, 1)
             else:
                 cal_out = torch.clamp(final["cal"] * 0.5 + 0.5 * final["sample"][:,-1,:,:].unsqueeze(1), 0, 1)
-            
-
         return final["sample"], x_noisy, img, final["cal"], cal_out
 
     def p_sample_loop_progressive(
@@ -626,7 +627,8 @@ class GaussianDiffusion:
             img = th.randn(*shape, device=device)
         indices = list(range(time))[::-1]
         org_c = img.size(1)
-        org_MRI = img[:, :-1, ...]      #original brain MR image
+        # org_MRI = img[:, :-1, ...]      #original brain MR image
+        org_MRI = img[:, :model.in_channels, ...]      #original brain MR image
         if progress:
             # Lazy import so that we don't depend on tqdm.
             from tqdm.auto import tqdm
@@ -987,17 +989,17 @@ class GaussianDiffusion:
         if model_kwargs is None:
             model_kwargs = {}
         if noise is None:
-            noise = th.randn_like(x_start[:, -1:, ...])
+            noise = th.randn_like(x_start[:, model.module.in_channels:, ...])
 
 
-        mask = x_start[:, -1:, ...]
-        res = torch.where(mask > 0, 1, 0)   #merge all tumor classes into one to get a binary segmentation mask
+        mask = x_start[:, model.module.in_channels:, ...]
+        res = mask
+        # res = torch.where(mask > 0, 1, 0)   #merge all tumor classes into one to get a binary segmentation mask
 
         res_t = self.q_sample(res, t, noise=noise)     #add noise to the segmentation channel
         x_t=x_start.float()
-        x_t[:, -1:, ...]=res_t.float()
+        x_t[:, model.module.in_channels:, ...]=res_t.float()
         terms = {}
-
 
         if self.loss_type == LossType.MSE or self.loss_type == LossType.BCE_DICE or self.loss_type == LossType.RESCALED_MSE:
 

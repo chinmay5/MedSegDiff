@@ -63,6 +63,7 @@ def model_and_diffusion_defaults():
         use_new_attention_order=False,
         dpm_solver = False,
         version = 'new',
+        out_channels=1
     )
     res.update(diffusion_defaults())
     return res
@@ -101,6 +102,7 @@ def create_model_and_diffusion(
     use_new_attention_order,
     dpm_solver,
     version,
+    out_channels
 ):
     model = create_model(
         image_size,
@@ -121,6 +123,7 @@ def create_model_and_diffusion(
         use_fp16=use_fp16,
         use_new_attention_order=use_new_attention_order,
         version = version,
+        out_channels=out_channels
     )
     diffusion = create_gaussian_diffusion(
         steps=diffusion_steps,
@@ -155,6 +158,7 @@ def create_model(
     use_fp16=False,
     use_new_attention_order=False,
     version = 'new',
+    out_channels=1
 ):
     if channel_mult == "":
         if image_size == 512:
@@ -174,11 +178,14 @@ def create_model(
     for res in attention_resolutions.split(","):
         attention_ds.append(image_size // int(res))
 
+    # Computing the number of output channels.
+    # This depends upon learning sigma along with the mu
+    out_channels = out_channels * (1 + learn_sigma)
     return UNetModel_newpreview(
         image_size=image_size,
         in_channels=in_ch,
         model_channels=num_channels,
-        out_channels=2,#(3 if not learn_sigma else 6),
+        out_channels=out_channels,#(3 if not learn_sigma else 6),
         num_res_blocks=num_res_blocks,
         attention_resolutions=tuple(attention_ds),
         dropout=dropout,
@@ -196,7 +203,7 @@ def create_model(
         image_size=image_size,
         in_channels=in_ch,
         model_channels=num_channels,
-        out_channels=2,#(3 if not learn_sigma else 6),
+        out_channels=out_channels,#(3 if not learn_sigma else 6),
         num_res_blocks=num_res_blocks,
         attention_resolutions=tuple(attention_ds),
         dropout=dropout,
@@ -480,3 +487,21 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError("boolean value expected")
+
+
+if __name__ == '__main__':
+    model = create_model(
+        128,
+        128,
+        2,
+        in_ch=2,  # num_channels + 1
+        num_heads=1,
+        learn_sigma=True,
+        out_channels=3
+    )
+    import torch
+    x = torch.randn(4, 2, 128, 128)
+    timesteps = torch.tensor([5, 5, 5, 5], dtype=torch.float)
+    a, b = model(x, timesteps)
+    print(a.shape)
+    print(b.shape)

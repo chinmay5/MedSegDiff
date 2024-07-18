@@ -869,7 +869,8 @@ class UNetModel_newpreview(nn.Module):
         self.input_blocks = nn.ModuleList(
             [
                 TimestepEmbedSequential(
-                    conv_nd(dims, in_channels, model_channels, 3, padding=1)
+                    # conv_nd(dims, in_channels, model_channels, 3, padding=1)
+                    conv_nd(dims, in_channels + out_channels, model_channels, 3, padding=1)
                 )
             ]
         )
@@ -1015,7 +1016,8 @@ class UNetModel_newpreview(nn.Module):
 
         if high_way:
             features = 32
-            self.hwm = Generic_UNet(self.in_channels - 1, features, 1, 5, anchor_out=True, upscale_logits=True)
+            # self.hwm = Generic_UNet(self.in_channels - 1, features, 1, 5, anchor_out=True, upscale_logits=True)
+            self.hwm = Generic_UNet(self.in_channels, features, 4, 5, anchor_out=True, upscale_logits=True)
 
     def convert_to_fp16(self):
         """
@@ -1074,7 +1076,7 @@ class UNetModel_newpreview(nn.Module):
             emb = emb + self.label_emb(y)
 
         h = x.type(self.dtype)
-        c = h[:,:-1,...]
+        c = h[:,:self.in_channels,...]
         anch, cal = self.highway_forward(c)
         for ind, module in enumerate(self.input_blocks):
             if len(emb.size()) > 2:
